@@ -1,52 +1,49 @@
 import streamlit as st
 import requests
 
-# 🔐 API-ключ из секретов
+# ✅ Получаем API-ключ из secrets
 OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
-API_URL = "https://openrouter.ai/api/v1/chat/completions"
+
+# 🔧 Настройки API
 MODEL = "openai/gpt-4o"
+API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-# ✅ Проверка ключа
-if not OPENAI_API_KEY:
-    st.error("❌ Ключ не найден!")
-else:
-    st.success("✅ Ключ получен!")
-
-# 🧠 Интерфейс
+# Интерфейс
 st.set_page_config(page_title="🧠 Медицинский Консультант", page_icon="🧠")
 st.title("🧠 Минимальный Медицинский Консультант")
-st.markdown("GPT-4o через OpenRouter API")
+st.markdown("🚀 GPT-4o через OpenRouter API")
 
-question = st.text_input("Введите простой вопрос:")
+question = st.text_input("Введите медицинский вопрос:")
 
 if st.button("📨 Отправить") and question:
     with st.spinner("💬 Генерация ответа..."):
         try:
-            response = requests.post(
-                API_URL,
-                headers={
-                    "Authorization": f"Bearer {OPENAI_API_KEY}",
-                    "Content-Type": "application/json",
-                    "HTTP-Referer": "https://streamlit.io",  # ✅ обязательно для OpenRouter
-                    "X-Title": "medical-consultant-app"
-                },
-                json={
-                    "model": MODEL,
-                    "messages": [
-                        {"role": "system", "content": "Ты медицинский помощник, отвечай на русском кратко."},
-                        {"role": "user", "content": question}
-                    ],
-                    "temperature": 0.3
-                }
-            )
+            # ⛑️ Запрос в OpenRouter
+            headers = {
+                "Authorization": f"Bearer {OPENAI_API_KEY}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://medical-consultant-app.streamlit.app",  # Обязателен
+                "X-Title": "medical-consultant-app"
+            }
+
+            payload = {
+                "model": MODEL,
+                "messages": [
+                    {"role": "system", "content": "Ты медицинский помощник. Отвечай кратко и на русском."},
+                    {"role": "user", "content": question}
+                ],
+                "temperature": 0.3
+            }
+
+            response = requests.post(API_URL, headers=headers, json=payload)
 
             if response.status_code == 200:
-                data = response.json()
-                answer = data["choices"][0]["message"]["content"]
-                st.markdown(f"**🤖 Ответ:** {answer}")
+                answer = response.json()["choices"][0]["message"]["content"]
+                st.success("✅ Ответ получен:")
+                st.markdown(answer)
             else:
-                st.error(f"❌ OpenRouter ошибка: {response.status_code}")
+                st.error(f"❌ Ошибка OpenRouter: {response.status_code}")
                 st.json(response.json())
 
         except Exception as e:
-            st.error(f"❌ Системная ошибка: {e}")
+            st.error(f"❌ Ошибка: {e}")
