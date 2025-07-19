@@ -1,0 +1,17 @@
+# Кэш Python
+__pycache__/
+*.py[cod]
+
+# Конфиденциальные и временные файлы
+.env
+*.env
+
+# Streamlit secrets
+.streamlit/secrets.toml
+
+# Файлы Jupyter/Colab (если вдруг)
+.ipynb_checkpoints/
+
+# Системные файлы
+.DS_Store
+Thumbs.db
