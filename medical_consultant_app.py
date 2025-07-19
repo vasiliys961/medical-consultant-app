@@ -1,28 +1,14 @@
-import openai
-import streamlit as st
 import os
-from dotenv import load_dotenv
+import requests
+import streamlit as st
 
-# Загрузка переменных из .env
-load_dotenv()
-
-# OpenRouter конфигурация
+# Получаем API-ключ из секретов окружения
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_API_BASE = "https://openrouter.ai/api/v1"
 MODEL = "openai/gpt-4o"
+API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-# Установка параметров для OpenRouter
-openai.api_key = OPENAI_API_KEY
-openai.base_url = OPENAI_API_BASE
-
-HEADERS = {
-    "Authorization": f"Bearer {OPENAI_API_KEY}",
-    "HTTP-Referer": "https://github.com/your-username/medical-consultant-app",  # заменишь на свой
-    "X-Title": "Medical Consultant Streamlit App"
-}
-
-# Системная инструкция — вставь свой промпт сюда полностью
-system_instruction =  """Общая Концепция: Мультиагентный Медицинский Консультант
+# Инструкция системы (ВМК)
+system_instruction = """Общая Концепция: Мультиагентный Медицинский Консультант
 
 Вы — AI-система, мультиагентный медицинский консультант. Ядро и интерфейс – Ведущий Медицинский Консультант (ВМК). ВМК координирует специализированных AI-агентов для высококачественных медконсультаций. Все ответы на хорошем русском языке.
 
@@ -114,40 +100,50 @@ UpToDate, Medscape, PubMed Central, Cochrane Reviews, руководства п�
 Напоминайте о важности документирования.
 Вы – лицо системы: обеспечивайте целостный, компетентный, этичный ответ, при необходимости , по запросу можешь предложить и evidence-based альтернативные подходы."""
 
-# Настройки страницы
+# Настройка интерфейса
 st.set_page_config(page_title="🧠 Медицинский Консультант", page_icon="🧠")
 st.title("🧠 Медицинский Консультант")
 st.markdown("AI-система на базе OpenRouter GPT-4o")
 
-# История сообщений
+# Начальное сообщение
 if "messages" not in st.session_state:
     st.session_state.messages = [{"role": "system", "content": system_instruction}]
 
-# Отображение истории
+# Отображение диалога
 for msg in st.session_state.messages[1:]:
-    role = "👤 Врач" if msg["role"] == "user" else "🤖 Медицинский Консультант"
+    role = "👤 Врач" if msg["role"] == "user" else "🤖 Консультант"
     st.markdown(f"**{role}:** {msg['content']}")
 
-# Очистка диалога
+# Очистка чата
 if st.button("🧹 Очистить диалог"):
     st.session_state.messages = [{"role": "system", "content": system_instruction}]
     st.rerun()
 
-# Ввод нового вопроса
+# Ввод вопроса
 question = st.text_area("Введите новый вопрос или продолжение диалога:")
 
+# Обработка запроса
 if st.button("📨 Отправить") and question:
     st.session_state.messages.append({"role": "user", "content": question})
     with st.spinner("💬 Генерация ответа..."):
         try:
-            response = openai.chat.completions.create(
-                model=MODEL,
-                messages=st.session_state.messages,
-                temperature=0.3,
-                headers=HEADERS
+            response = requests.post(
+                API_URL,
+                headers={
+                    "Authorization": f"Bearer {OPENAI_API_KEY}",
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": "https://share.streamlit.io/",
+                    "X-Title": "Medical Consultant App"
+                },
+                json={
+                    "model": MODEL,
+                    "messages": st.session_state.messages,
+                    "temperature": 0.3
+                }
             )
-            reply = response.choices[0].message.content
+            reply = response.json()["choices"][0]["message"]["content"]
             st.session_state.messages.append({"role": "assistant", "content": reply})
             st.rerun()
         except Exception as e:
             st.error(f"❌ Ошибка: {e}")
+
