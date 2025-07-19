@@ -71,7 +71,7 @@ if st.button("📨 Отправить") and question:
                 headers={
                     "Authorization": f"Bearer {OPENAI_API_KEY}",
                     "Content-Type": "application/json",
-                    "HTTP-Referer": "https://medical-consultant-app.streamlit.app",
+                    "Referer": "https://medical-consultant-app.streamlit.app",
                     "X-Title": "medical-consultant-app"
                 },
                 json={
@@ -91,4 +91,3 @@ if st.button("📨 Отправить") and question:
                 st.json(response.json())
         except Exception as e:
             st.error(f"❌ Ошибка: {e}")
-
