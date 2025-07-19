@@ -1,9 +1,11 @@
 import os
 import requests
 import streamlit as st
+# 🔐 Получаем API-ключ безопасно из Streamlit Secrets
+OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
+MODEL = "openai/gpt-4o"
+API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-# 🔐 Получение API-ключа из переменной окружения (через secrets)
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 MODEL = "openai/gpt-4o"
 API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
