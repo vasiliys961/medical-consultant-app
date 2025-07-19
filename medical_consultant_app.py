@@ -2,22 +2,12 @@ import os
 import requests
 import streamlit as st
 
-# Получаем API-ключ из секретов окружения
+# 🔐 Получение API-ключа из переменной окружения (через secrets)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 MODEL = "openai/gpt-4o"
 API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-# Инструкция системы (ВМК)
-system_instruction = import os
-import requests
-import streamlit as st
-
-# Получаем API-ключ и модель
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-MODEL = "openai/gpt-4o"
-API_URL = "https://openrouter.ai/api/v1/chat/completions"
-
-# Системная инструкция
+# 📘 Системная инструкция (можешь заменить на свою полную при желании)
 system_instruction = """Общая Концепция: Мультиагентный Медицинский Консультант
 
 Вы — AI-система, мультиагентный медицинский консультант. Ядро и интерфейс – Ведущий Медицинский Консультант (ВМК). ВМК координирует специализированных AI-агентов для высококачественных медконсультаций. Все ответы на хорошем русском языке.
@@ -35,25 +25,29 @@ system_instruction = """Общая Концепция: Мультиагентн�
 
 Всегда Отвечайте на Хорошем Русском Языке. Профессиональный, доступный тон. Подчеркивайте доказательную медицину, признавая сложность решений. Идет глубокие познания в альтернативных методах лечения, а также анти-эйджинговых и longevity стратегиях, основанных на доступных доказательных методиках Поощряйте консультации с другими специалистами. Напоминайте о важности документирования. Вы – лицо системы: обеспечивайте целостный, компетентный, этичный ответ, при необходимости , по запросу можешь предложить и evidence-based альтернативные подходы."""
 
-# Интерфейс
+# 🧠 Интерфейс Streamlit
 st.set_page_config(page_title="🧠 Медицинский Консультант", page_icon="🧠")
 st.title("🧠 Медицинский Консультант")
 st.markdown("AI-система на базе OpenRouter GPT-4o")
 
-# История сообщений
+# 💬 Инициализация чата
 if "messages" not in st.session_state:
     st.session_state.messages = [{"role": "system", "content": system_instruction}]
 
+# 📜 Отображение истории
 for msg in st.session_state.messages[1:]:
     role = "👤 Врач" if msg["role"] == "user" else "🤖 Консультант"
     st.markdown(f"**{role}:** {msg['content']}")
 
+# 🧹 Очистка
 if st.button("🧹 Очистить диалог"):
     st.session_state.messages = [{"role": "system", "content": system_instruction}]
     st.rerun()
 
+# ✍️ Ввод вопроса
 question = st.text_area("Введите новый вопрос или продолжение диалога:")
 
+# 📨 Отправка запроса
 if st.button("📨 Отправить") and question:
     st.session_state.messages.append({"role": "user", "content": question})
     with st.spinner("💬 Генерация ответа..."):
@@ -73,7 +67,6 @@ if st.button("📨 Отправить") and question:
                 }
             )
 
-            # 🔍 Проверка на успешный ответ
             if response.status_code == 200:
                 result = response.json()
                 if "choices" in result:
@@ -81,59 +74,14 @@ if st.button("📨 Отправить") and question:
                     st.session_state.messages.append({"role": "assistant", "content": reply})
                     st.rerun()
                 else:
-                    st.error("❌ Ответ от модели не содержит поля 'choices'")
+                    st.error("❌ Ответ не содержит 'choices'")
                     st.json(result)
             else:
-                st.error(f"❌ OpenRouter ответил с ошибкой: {response.status_code}")
+                st.error(f"❌ OpenRouter ошибка: {response.status_code}")
                 st.json(response.json())
 
         except Exception as e:
             st.error(f"❌ Системная ошибка: {e}")
 
-# Настройка интерфейса
-st.set_page_config(page_title="🧠 Медицинский Консультант", page_icon="🧠")
-st.title("🧠 Медицинский Консультант")
-st.markdown("AI-система на базе OpenRouter GPT-4o")
 
-# Начальное сообщение
-if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "system", "content": system_instruction}]
-
-# Отображение диалога
-for msg in st.session_state.messages[1:]:
-    role = "👤 Врач" if msg["role"] == "user" else "🤖 Консультант"
-    st.markdown(f"**{role}:** {msg['content']}")
-
-# Очистка чата
-if st.button("🧹 Очистить диалог"):
-    st.session_state.messages = [{"role": "system", "content": system_instruction}]
-    st.rerun()
-
-# Ввод вопроса
-question = st.text_area("Введите новый вопрос или продолжение диалога:")
-
-# Обработка запроса
-if st.button("📨 Отправить") and question:
-    st.session_state.messages.append({"role": "user", "content": question})
-    with st.spinner("💬 Генерация ответа..."):
-        try:
-            response = requests.post(
-                API_URL,
-                headers={
-                    "Authorization": f"Bearer {OPENAI_API_KEY}",
-                    "Content-Type": "application/json",
-                    "HTTP-Referer": "https://share.streamlit.io/",
-                    "X-Title": "Medical Consultant App"
-                },
-                json={
-                    "model": MODEL,
-                    "messages": st.session_state.messages,
-                    "temperature": 0.3
-                }
-            )
-            reply = response.json()["choices"][0]["message"]["content"]
-            st.session_state.messages.append({"role": "assistant", "content": reply})
-            st.rerun()
-        except Exception as e:
-            st.error(f"❌ Ошибка: {e}")
 
