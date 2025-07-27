@@ -4,7 +4,7 @@ import requests
 # 🔐 API-KEY из secrets (OpenRouter)
 OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
 API_URL = "https://openrouter.ai/api/v1/chat/completions"
-MODEL = "openai/gpt-4o"
+MODEL = "openai/gpt-4o-search-preview"
 
 # 🧐 Системная инструкция (мультиагентная логика)
 system_instruction = """Общая Концепция: Мультиагентный Медицинский Консультант
