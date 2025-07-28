@@ -2,9 +2,10 @@ import streamlit as st
 import requests
 
 # 🔐 API-KEY из secrets (OpenRouter)
+# 🔐 API-KEY из secrets (OpenRouter)
 OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
-API_URL = "https://openrouter.ai/api/v1/chat/completions"
-MODEL = "openai/gpt-4o-search-preview"
+API_URL = "https://openrouter.ai/api/v1/chat/completions"  # ⚠️ Убраны лишние пробелы
+MODEL = "anthropic/claude-sonnet-4"  # ✅ Новая модель: Claude Sonnet 4
 
 # 🧐 Системная инструкция (мультиагентная логика)
 system_instruction = """ **Промпт: Американский профессор клинической медицины**
