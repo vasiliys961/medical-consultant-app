@@ -1,14 +1,17 @@
 import streamlit as st
 import requests
+import base64
+import pandas as pd
+from PIL import Image
+import traceback
 
-# 🔐 API-KEY из secrets (OpenRouter)
-# 🔐 API-KEY из secrets (OpenRouter)
-OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
-API_URL = "https://openrouter.ai/api/v1/chat/completions"  # ⚠️ Убраны лишние пробелы
-MODEL = "anthropic/claude-sonnet-4"  # ✅ Новая модель: Claude Sonnet 4
+try:
+    import pydicom
+except ImportError:
+    pydicom = None
 
-# 🧐 Системная инструкция (мультиагентная логика)
-system_instruction = """ Роль: Ты — американский профессор клинической медицины и ведущий специалист в университетской клинике, обладающий дополнительной компетенцией в области разработки ПО, анализа данных и применения искусственного интеллекта (включая нейросети) в медицине. Ты совмещаешь клиническую строгость с научно-технической глубиной, давая ответы как по медицине, так и по техническим вопросам, связанным с медицинской практикой.
+specialist_prompt = """
+Ты — американский профессор клинической медицины и ведущий специалист в университетской клинике, обладающий дополнительной компетенцией в области разработки ПО, анализа данных и применения искусственного интеллекта (включая нейросети) в медицине. Ты совмещаешь клиническую строгость с научно-технической глубиной, давая ответы как по медицине, так и по техническим вопросам, связанным с медицинской практикой.
 
 Контекст:
 - Основная задача: сформулировать строгую, научно обоснованную и практически применимую клиническую директиву для врача, готовую к немедленному использованию в реальной практике.
@@ -43,63 +46,245 @@ system_instruction = """ Роль: Ты — американский профе�
 - В медицине — использовать только проверенные международные источники, дата публикации ≤ 5 лет.
 - В разработке — использовать только актуальные стабильные версии библиотек, избегать устаревших методов.
 - Обе части ответа должны быть написаны строго и профессионально, без упрощений и обтекаемых формулировок.
-
-
 """
 
-# 📊 Настройка интерфейса
-st.set_page_config(page_title="🧠 Медицинский Консультант", page_icon="🧠")
-st.title("🧠 Медицинский Консультант")
-st.markdown("AI через OpenRouter GPT-4o. Ведущий Медицинский Консультант координирует ответ.")
+st.set_page_config(page_title="Медицинский ассистент", layout="centered")
+st.title("Медицинский ассистент: мультиформатный анализ (рентген, КТ, МРТ, ЭКГ, анализы)")
 
-# 💬 История сообщений
-if "messages" not in st.session_state:
-    st.session_state.messages = [
-        {"role": "system", "content": system_instruction}
-    ]
+api_key = st.secrets.get("OPENAI_API_KEY", None)
+if not api_key:
+    st.error("OPENAI_API_KEY не найден! Добавьте в .streamlit/secrets.toml")
+    st.stop()
 
-# 🔄 Очистка чата
-if st.button("🧹 Очистить диалог"):
-    st.session_state.messages = [
-        {"role": "system", "content": system_instruction}
-    ]
-    st.rerun()
+PROMPTS = {
+    "Рентген": """Ты — эксперт по интерпретации рентгенологических исследований. Твоя задача — анализировать загруженный рентгеновский снимок согласно международным гайдлайнам (например, Fleischner Society, ACR, ESR), 
+    выявлять патологии, оценивать степень их выраженности, давать рекомендации для врача. Всегда ссылайся на актуальные клинические рекомендации,
+    используй современные онлайн-ресурсы для валидации (например, Radiopaedia, UpToDate, Medscape). Отвечай структурированно: сначала краткий вывод, затем детальный разбор по анатомическим зонам, выявленным изменениям, степени выраженности патологии, дифференциальной диагностике и рекомендациям по дальнейшему обследованию или лечению. Указывай, 
+    какие наиболее вероятные диагнозы и какие дополнительные данные нужны для более точного анализа (возраст, жалобы, анамнез, сопутствующие заболевания). Не выдумывай диагнозы без достаточных данных, избегай галлюцинаций. Используй ключевые слова: рентген, интерпретация, патология, степень выраженности, рекомендации, гайдлайны, онлайн-ресурсы.""",
+    "КТ , МРТ": """Ты — профессиональный радиолог, обладаешь экспертными знаниями в области КТ, МРТ, рентгенологических исследований. Твоя задача — анализировать загруженное изображение, выявлять патологические изменения, 
+    давать заключение по органам и структурам согласно международным стандартам и руководствам (например, ESR, ACR, Fleischner Society, RSNA),
+    использовать актуальные онлайн-ресурсы (Radiopaedia, UpToDate, Medscape) для уточнения данных. Работай структурировано: краткое заключение,
+    детальный анализ по органам и зонам, оценка патологических изменений, рекомендации для врача, в том числе по дополнительной диагностике и обследованию.
+    Предлагай вероятные диагнозы и Указывай, какие дополнительные клинические данные необходимы для более точного анализа (возраст, жалобы, анамнез, сопутствующие заболевания, история лечения). Предлагай наиболее вероятные диагнозы.Не делай необоснованных выводов, избегай галлюцинаций, не выдумывай диагнозы без достаточных данных. Используй ключевые слова: КТ, МРТ, рентген, патология, заключение, рекомендации, дифференциальная диагностика, степенит выраженности, международные стандарты, online-ресурсы..""",
+    
+    
+    "ЭКГ": """Ты — эксперт по анализу изображений ЭКГ с использованием нейросетевых технологий. Твоя задача — точно интерпретировать загруженное изображение ЭКГ,
+     выявлять патологии (аритмии, признаки ишемии, инфаркта, гипертрофии и др.), оценивать качество записи и артефакты. 
+     Всегда ссылайся на актуальные клинические рекомендации (ESC, AHA), используй современные онлайн-ресурсы для валидации 
+     (например, ECG Wave-Maven, Medscape, UpToDate). Отвечай структурированно: сначала краткий вывод, затем детальный разбор по отведениям,
+     интервалам, комплексам, аритмиям, признакам патологии. Указывай, какие наиболее вероятные диагнозы соответствуют выявленным изменениям. 
+     Не выдумывай диагнозы без достаточных данных, избегай галлюцинаций. Используй ключевые слова: ЭКГ, изображение ЭКГ,
+     анализ ЭКГ, аритмия, ишемия, инфаркт, гипертрофия, интервалы, комплексы, артефакты, качество записи, клинические рекомендации, онлайн-ресурсы.""",
 
-# 🔢 Показываем историю чата
-for msg in st.session_state.messages[1:]:
-    role = "👤 Врач" if msg["role"] == "user" else "🧠 ВМК"
-    st.markdown(f"**{role}:** {msg['content']}")
+    "Лабораторные анализы": """Ты — эксперт по лабораторной диагностике. Твоя задача — профессионально анализировать предоставленную таблицу
+    с результатами лабораторных анализов, выявлять отклонения от нормы, интерпретировать значения по современным клиническим рекомендациям
+    и международным стандартам (например, CLSI, IFCC, WHO), предоставлять структурированное заключение: краткий итог, подробный анализ по каждому параметру,
+    выявление клинических значимых изменений, рекомендации для врача и указание необходимых дополнительных исследований или действий. 
+    Обязательно выделяй референтные значения, степени отклонения, возможные причины и дополнительные факторы для диагностики. 
+    Указывай, какие клинические данные требуются для точной интерпретации (возраст, пол, сопутствующие заболевания, симптомы, анамнез).
+    Предлагай возможные диагнозы но, Не выдумывай диагнозы без достаточных данных, избегай галлюцинаций. 
+    Используй ключевые слова: лабораторная диагностика, анализы, интерпретация, референтные значения, отклонения, рекомендации, клиническая директива, стандарты, онлайн-ресурсы."""
+}
 
-# 🖊️ Ввод запроса
-question = st.text_area("✍️ Введите запрос или продолжение диалога:")
+# ---- Блок чата с профессором ----
+st.markdown("### Чат с профессором медицины")
+if "chat_history" not in st.session_state:
+    st.session_state["chat_history"] = []
 
-# 📨 Отправка
-if st.button("📨 Отправить") and question:
-    st.session_state.messages.append({"role": "user", "content": question})
-    with st.spinner("🔍 Обработка запроса..."):
-        try:
-            response = requests.post(
-                API_URL,
-                headers={
-                    "Authorization": f"Bearer {OPENAI_API_KEY}",
-                    "Content-Type": "application/json",
-                    "Referer": "https://medical-consultant-app.streamlit.app",
-                    "X-Title": "medical-consultant-app"
-                },
-                json={
-                    "model": MODEL,
-                    "messages": st.session_state.messages,
-                    "temperature": 0.3
+col1, col2 = st.columns([5, 1])
+with col1:
+    chat_message = st.text_area("Введите вопрос профессору", key="prof_input", height=80)
+with col2:
+    chat_send = st.button("Получить ответ", key="prof_btn")
+if chat_send and chat_message.strip():
+    payload = {
+        "model": "anthropic/claude-sonnet-4",
+        "max_tokens": 2048,
+        "messages": [
+            {"role": "system", "content": specialist_prompt},
+            {"role": "user", "content": chat_message}
+        ],
+        "temperature": 0.18
+    }
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    try:
+        resp = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
+        if resp.status_code == 200:
+            result = resp.json()
+            answer = result.get("choices", [{}])[0].get("message", {}).get("content", "Нет ответа")
+            st.session_state["chat_history"].append({"user": chat_message, "professor": answer})
+        else:
+            st.error(f"Ошибка чата: {resp.text[:1000]}")
+    except Exception as e:
+        st.error(f"Ошибка запроса к чату: {str(e)}\n{traceback.format_exc()}")
+
+if st.session_state["chat_history"]:
+    for msg in st.session_state["chat_history"][::-1]:
+        st.markdown(f"> **Вы:** {msg['user']}")
+        st.markdown(f"**Профессор:** {msg['professor']}")
+
+st.markdown("---")
+
+# ---- Файловый анализ ----
+file_type = st.selectbox(
+    "Выберите тип медицинских данных для анализа:",
+    list(PROMPTS.keys())
+)
+
+uploaded_file = st.file_uploader(
+    f"Загрузите файл ({file_type}) — поддерживаются DICOM .dcm, CSV, PNG, JPG, JPEG:",
+    type=["dcm", "csv", "png", "jpg", "jpeg"]
+)
+
+analysis_result = None
+
+if uploaded_file:
+    fname = uploaded_file.name.lower()
+    custom_prompt = PROMPTS[file_type]
+
+    # DICOM анализ
+    if fname.endswith(".dcm"):
+        if pydicom is None:
+            st.error("Установите pydicom для работы с DICOM.")
+        else:
+            try:
+                ds = pydicom.dcmread(uploaded_file)
+                st.write("DICOM метаданные:", ds)
+                img_array = ds.pixel_array
+                img_array = (img_array - img_array.min()) / (img_array.max() - img_array.min()) * 255
+                img = Image.fromarray(img_array.astype('uint8'))
+                st.image(img, caption="DICOM-снимок", use_container_width=True)
+                image_bytes = img.tobytes()
+                image_b64 = base64.b64encode(image_bytes).decode()
+            except Exception as e:
+                st.error(f"Ошибка декодирования DICOM: {str(e)}\n{traceback.format_exc()}")
+                image_b64 = None
+
+            if image_b64 and st.button(f"Анализировать {file_type} (DICOM)"):
+                data = {
+                    "model": "meta-llama/llama-3.2-90b-vision-instruct",
+                    "messages": [
+                        {"role": "system", "content": custom_prompt},
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": f"Анализируй этот {file_type} согласно международным рекомендациям."},
+                                {"type": "image_url", "image_url": f"data:image/png;base64,{image_b64}"}
+                            ]
+                        }
+                    ],
+                    "max_tokens": 2048,
+                    "temperature": 0.18
                 }
-            )
+                headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+                try:
+                    resp = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=data)
+                    if resp.status_code == 200:
+                        result = resp.json()
+                        analysis_result = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+                    else:
+                        st.error(f"Ошибка анализа: {resp.text[:1000]}")
+                except Exception as e:
+                    st.error(f"Ошибка отправки запроса: {str(e)}\n{traceback.format_exc()}")
 
-            if response.status_code == 200:
-                result = response.json()
-                reply = result["choices"][0]["message"]["content"]
-                st.session_state.messages.append({"role": "assistant", "content": reply})
-                st.rerun()
-            else:
-                st.error(f"OpenRouter ошибка: {response.status_code}")
-                st.json(response.json())
+    # CSV анализы
+    elif fname.endswith(".csv"):
+        try:
+            df = pd.read_csv(uploaded_file)
+            st.dataframe(df, use_container_width=True)
+            csv_text = df.to_csv(index=False)
         except Exception as e:
-            st.error(f"❌ Ошибка: {e}")
+            st.error(f"Ошибка чтения CSV: {str(e)}\n{traceback.format_exc()}")
+            csv_text = ""
+
+        if csv_text and st.button(f"Анализировать {file_type} (CSV)"):
+            data = {
+                "model": "anthropic/claude-sonnet-4",
+                "max_tokens": 2048,
+                "messages": [
+                    {"role": "system", "content": custom_prompt},
+                    {"role": "user", "content": f"Вот таблица (CSV):\n{csv_text}\nДай анализ как врач-эксперт по {file_type}."}
+                ],
+                "temperature": 0.18
+            }
+            headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+            try:
+                resp = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=data)
+                if resp.status_code == 200:
+                    result = resp.json()
+                    analysis_result = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+                else:
+                    st.error(f"Ошибка анализа: {resp.text[:1000]}")
+            except Exception as e:
+                st.error(f"Ошибка отправки запроса: {str(e)}\n{traceback.format_exc()}")
+
+    # Картинки
+    else:
+        try:
+            uploaded_file.seek(0)
+            image_bytes = uploaded_file.read()
+            st.image(image_bytes, caption=f"{file_type}-изображение", use_container_width=True)
+            image_b64 = base64.b64encode(image_bytes).decode()
+        except Exception as e:
+            st.error(f"Ошибка чтения изображения: {str(e)}\n{traceback.format_exc()}")
+            image_b64 = None
+
+        if image_b64 and st.button(f"Анализировать {file_type} (image)"):
+            data = {
+                "model": "meta-llama/llama-3.2-90b-vision-instruct",
+                "messages": [
+                    {"role": "system", "content": custom_prompt},
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": f"Проанализируй это {file_type}-изображение строго по указанному промпту."},
+                            {"type": "image_url", "image_url": f"data:{uploaded_file.type};base64,{image_b64}"}
+                        ]
+                    }
+                ],
+                "max_tokens": 2048,
+                "temperature": 0.18
+            }
+            headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+            try:
+                resp = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=data)
+                if resp.status_code == 200:
+                    result = resp.json()
+                    analysis_result = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+                else:
+                    st.error(f"Ошибка Vision анализа: {resp.text[:1000]}")
+            except Exception as e:
+                st.error(f"Ошибка отправки запроса: {str(e)}\n{traceback.format_exc()}")
+
+# --- Пересылка анализа профессору ---
+if analysis_result:
+    st.markdown(f"**{file_type} разбор:**\n\n{analysis_result}")
+    send_to_prof = st.button("Показать этот анализ профессору")
+    if send_to_prof:
+        payload = {
+            "model": "anthropic/claude-sonnet-4",
+            "max_tokens": 2048,
+            "messages": [
+                {"role": "system", "content": specialist_prompt},
+                {"role": "user", "content": f"Вот результат анализа ({file_type}):\n\n{analysis_result}\n\nПрокомментируйте как профессор."}
+            ],
+            "temperature": 0.18
+        }
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        try:
+            resp = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
+            if resp.status_code == 200:
+                result = resp.json()
+                prof_answer = result.get("choices", [{}])[0].get("message", {}).get("content", "Нет ответа профессора")
+                st.markdown(f"**Комментарий профессора:**\n\n{prof_answer}")
+                st.session_state["chat_history"].append({
+                    "user": f"Анализ ({file_type}): {analysis_result}",
+                    "professor": prof_answer
+                })
+            else:
+                st.error(f"Ошибка чата: {resp.text[:1000]}")
+        except Exception as e:
+            st.error(f"Ошибка запроса к чату: {str(e)}\n{traceback.format_exc()}")
+
+st.markdown("---")
+st.markdown("**В `.streamlit/secrets.toml` должен быть:**\nOPENAI_API_KEY = \"sk-or-v1-...\"")

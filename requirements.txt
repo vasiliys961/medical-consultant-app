@@ -1,5 +1,10 @@
 streamlit
 requests
+pdf2image
+pillow
+pydicom
+pandas
+
 
 
 
