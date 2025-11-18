@@ -1,9 +1,11 @@
+import os  # <<-- добавьте до определения get_api_key!
 import streamlit as st
 import requests
 import base64
 import pandas as pd
 from PIL import Image
 import traceback
+
 
 try:
     import pydicom
