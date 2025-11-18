@@ -10,6 +10,25 @@ try:
 except ImportError:
     pydicom = None
 
+# Универсальный блок для API-ключа
+def get_api_key():
+    try:
+        key = st.secrets.get("OPENAI_API_KEY")
+    except Exception:
+        key = None
+    if not key:
+        key = os.getenv("OPENAI_API_KEY")
+    return key
+
+api_key = get_api_key()
+if not api_key:
+    st.error(
+        "OPENAI_API_KEY не найден!\n"
+        "Streamlit Cloud: через Secrets (OPENAI_API_KEY = \"sk-...\").\n"
+        "Render/Railway/Heroku: через ENV (OPENAI_API_KEY=sk-...)."
+    )
+    st.stop()
+
 specialist_prompt = """
 Ты — американский профессор клинической медицины и ведущий специалист в университетской клинике, обладающий дополнительной компетенцией в области разработки ПО, анализа данных и применения искусственного интеллекта (включая нейросети) в медицине. Ты совмещаешь клиническую строгость с научно-технической глубиной, давая ответы как по медицине, так и по техническим вопросам, связанным с медицинской практикой.
 
@@ -286,5 +305,7 @@ if analysis_result:
         except Exception as e:
             st.error(f"Ошибка запроса к чату: {str(e)}\n{traceback.format_exc()}")
 
-st.markdown("---")
-st.markdown("**В `.streamlit/secrets.toml` должен быть:**\nOPENAI_API_KEY = \"sk-or-v1-...\"")
+st.markdown(
+    "**Streamlit Cloud:** В Secrets — OPENAI_API_KEY = \"sk-...\"\n"
+    "**Render/Railway:** В Environment variables — OPENAI_API_KEY=sk-..."
+)
