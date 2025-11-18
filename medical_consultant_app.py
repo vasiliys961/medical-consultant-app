@@ -12,24 +12,22 @@ try:
 except ImportError:
     pydicom = None
 
-# Универсальный блок для API-ключа
-def get_api_key():
+def get_api_key(name):
     try:
-        key = st.secrets.get("OPENAI_API_KEY")
-    except Exception:
-        key = None
-    if not key:
-        key = os.getenv("OPENAI_API_KEY")
-    return key
+        import streamlit as st
+        try:
+            return st.secrets[name]
+        except Exception:
+            pass
+    except ImportError:
+        pass
+    import os
+    return os.getenv(name)
 
-api_key = get_api_key()
-if not api_key:
-    st.error(
-        "OPENAI_API_KEY не найден!\n"
-        "Streamlit Cloud: через Secrets (OPENAI_API_KEY = \"sk-...\").\n"
-        "Render/Railway/Heroku: через ENV (OPENAI_API_KEY=sk-...)."
-    )
-    st.stop()
+api_key = get_api_key("OPENAI_API_KEY")
+openrouter_key = get_api_key("OPENROUTER_API_KEY")
+anthropic_key = get_api_key("ANTHROPIC_API_KEY")
+
 
 specialist_prompt = """
 Ты — американский профессор клинической медицины и ведущий специалист в университетской клинике, обладающий дополнительной компетенцией в области разработки ПО, анализа данных и применения искусственного интеллекта (включая нейросети) в медицине. Ты совмещаешь клиническую строгость с научно-технической глубиной, давая ответы как по медицине, так и по техническим вопросам, связанным с медицинской практикой.
